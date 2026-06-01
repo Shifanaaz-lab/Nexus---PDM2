@@ -1,0 +1,55 @@
+{
+    "timestamp": 1775547268.9576192,
+    "best_params": {
+        "subsample": 0.7,
+        "learning_rate": 0.05,
+        "colsample_bytree": 0.9,
+        "n_estimators": 800,
+        "max_depth": 8
+    },
+    "feature_names": [
+        "cycle",
+        "s1",
+        "s2",
+        "s3",
+        "setting1",
+        "setting2",
+        "setting3",
+        "s1_mean",
+        "s1_std",
+        "s1_ema",
+        "s1_lag1",
+        "s1_lag2",
+        "s1_change",
+        "s1_accel",
+        "s1_slope",
+        "s2_mean",
+        "s2_std",
+        "s2_ema",
+        "s2_lag1",
+        "s2_lag2",
+        "s2_change",
+        "s2_accel",
+        "s2_slope",
+        "s3_mean",
+        "s3_std",
+        "s3_ema",
+        "s3_lag1",
+        "s3_lag2",
+        "s3_change",
+        "s3_accel",
+        "s3_slope",
+        "health_index",
+        "life_ratio",
+        "cumulative_wear"
+    ],
+    "metrics": {
+        "test_rmse": 0.6848533241003705
+    },
+    "quantile_paths": {
+        "p10": "models/nexus_q10.json",
+        "p50": "models/nexus_q50.json",
+        "p90": "models/nexus_q90.json"
+    },
+    "accuracy_path": "models/nexus_accuracy.json"
+}
