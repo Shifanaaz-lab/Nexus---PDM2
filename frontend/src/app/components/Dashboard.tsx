@@ -150,10 +150,27 @@ type ApiData = {
 
 function getApiBaseUrl(): string {
   if (typeof window === "undefined") return "http://localhost:8001";
+  
+  // 1. Check if VITE_API_URL is injected by Vite at build time
+  const envUrl = (import.meta.env as any).VITE_API_URL;
+  if (envUrl && !envUrl.includes("<YOUR_ID>") && envUrl.startsWith("http")) {
+    return envUrl;
+  }
+
   const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1"
-    ? "http://localhost:8001"
-    : "https://predictive-maintenance-api.onrender.com";
+  if (host === "localhost" || host === "127.0.0.1") {
+    return "http://localhost:8001";
+  }
+
+  // 2. Dynamic Render Blueprint domain mapping
+  if (host.includes("predictive-maintenance-frontend")) {
+    const protocol = window.location.protocol;
+    const derivedHost = host.replace("predictive-maintenance-frontend", "predictive-maintenance-api");
+    return `${protocol}//${derivedHost}`;
+  }
+
+  // Fallback
+  return "https://predictive-maintenance-api.onrender.com";
 }
 
 function getEngineRangeForMachineTypeId(machineType: string): { start: number; end: number } {

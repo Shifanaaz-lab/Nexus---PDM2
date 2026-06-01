@@ -9,6 +9,31 @@ const MAX_LOGIN_ATTEMPTS = 3;
 const LOCKOUT_TIME = 30000; // 30 seconds
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
+function getApiBaseUrl(): string {
+  if (typeof window === "undefined") return "http://localhost:8001";
+  
+  // 1. Check if VITE_API_URL is injected by Vite at build time
+  const envUrl = (import.meta.env as any).VITE_API_URL;
+  if (envUrl && !envUrl.includes("<YOUR_ID>") && envUrl.startsWith("http")) {
+    return envUrl;
+  }
+
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") {
+    return "http://localhost:8001";
+  }
+
+  // 2. Dynamic Render Blueprint domain mapping
+  if (host.includes("predictive-maintenance-frontend")) {
+    const protocol = window.location.protocol;
+    const derivedHost = host.replace("predictive-maintenance-frontend", "predictive-maintenance-api");
+    return `${protocol}//${derivedHost}`;
+  }
+
+  // Fallback
+  return "https://predictive-maintenance-api.onrender.com";
+}
+
 interface ValidationError {
   field: string;
   message: string;
@@ -192,10 +217,9 @@ export function LoginScreen() {
     }
     
     try {
-      // Call backend authentication API
-      const apiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:8001'
-        : 'https://predictive-maintenance-api.onrender.com';
+      // Call backend authentication API dynamically
+      const apiBaseUrl = getApiBaseUrl();
+      console.log("Authenticating with API Base URL:", apiBaseUrl);
       
       const response = await fetch(`${apiBaseUrl}/api/login`, {
         method: 'POST',
