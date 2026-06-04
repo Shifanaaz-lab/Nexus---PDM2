@@ -24,6 +24,8 @@ CORS(app, origins=[
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://predictive-maintenance-frontend-et2v.onrender.com",
+    "https://predictive-maintenance-api-3n9u.onrender.com",
     "https://*.onrender.com",
     "https://*.vercel.app"
 ])
