@@ -153,7 +153,7 @@ function getApiBaseUrl(): string {
   const host = window.location.hostname;
   return host === "localhost" || host === "127.0.0.1"
     ? "http://localhost:8001"
-    : "https://predictive-maintenance-api.onrender.com";
+    : "https://predictive-maintenance-api-3n9u.onrender.com";
 }
 
 function getEngineRangeForMachineTypeId(machineType: string): { start: number; end: number } {
