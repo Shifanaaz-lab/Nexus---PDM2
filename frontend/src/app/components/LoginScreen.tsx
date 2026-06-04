@@ -9,31 +9,6 @@ const MAX_LOGIN_ATTEMPTS = 3;
 const LOCKOUT_TIME = 30000; // 30 seconds
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
-function getApiBaseUrl(): string {
-  if (typeof window === "undefined") return "http://localhost:8001";
-  
-  // 1. Check if VITE_API_URL is injected by Vite at build time
-  const envUrl = (import.meta.env as any).VITE_API_URL;
-  if (envUrl && !envUrl.includes("<YOUR_ID>") && envUrl.startsWith("http")) {
-    return envUrl;
-  }
-
-  const host = window.location.hostname;
-  if (host === "localhost" || host === "127.0.0.1") {
-    return "http://localhost:8001";
-  }
-
-  // 2. Dynamic Render Blueprint domain mapping
-  if (host.includes("predictive-maintenance-frontend")) {
-    const protocol = window.location.protocol;
-    const derivedHost = host.replace("predictive-maintenance-frontend", "predictive-maintenance-api");
-    return `${protocol}//${derivedHost}`;
-  }
-
-  // Fallback
-  return "https://predictive-maintenance-api.onrender.com";
-}
-
 interface ValidationError {
   field: string;
   message: string;
@@ -200,7 +175,7 @@ export function LoginScreen() {
     setIsLoading(true);
     setErrors([]);
     setIsLoading(true);
-    
+
     // Validate inputs
     const idError = validateOperatorId(operatorId);
     if (idError) {
@@ -208,19 +183,20 @@ export function LoginScreen() {
       setIsLoading(false);
       return;
     }
-    
+
     const pwdError = validatePassword(password);
     if (pwdError) {
       setErrors([{ field: 'password', message: pwdError }]);
       setIsLoading(false);
       return;
     }
-    
+
     try {
-      // Call backend authentication API dynamically
-      const apiBaseUrl = getApiBaseUrl();
-      console.log("Authenticating with API Base URL:", apiBaseUrl);
-      
+      // Call backend authentication API
+      const apiBaseUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://127.0.0.1:8001'
+        : 'https://predictive-maintenance-api.onrender.com';
+
       const response = await fetch(`${apiBaseUrl}/api/login`, {
         method: 'POST',
         headers: {
@@ -231,9 +207,9 @@ export function LoginScreen() {
           password: password
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (data.status === 'success') {
         // Store session token and expiry
         const sessionToken = data.data.session_token;
@@ -243,11 +219,11 @@ export function LoginScreen() {
           role: data.data.role,
           loginTime: data.data.login_time
         };
-        
+
         // Store session token in localStorage for persistent sessions
         localStorage.setItem("sessionToken", sessionToken);
         localStorage.setItem("sessionExpiry", sessionExpiry);
-        
+
         // Remember Me functionality
         if (rememberMe) {
           localStorage.setItem("rememberedUser", JSON.stringify({
@@ -257,11 +233,11 @@ export function LoginScreen() {
         } else {
           localStorage.removeItem("rememberedUser");
         }
-        
+
         // Success - credentials meet all security requirements
         audioSystem.playSystemEvent();
         setIsLoading(false);
-        
+
         // Store user info in sessionStorage
         sessionStorage.setItem("currentUser", JSON.stringify(authenticatedUser));
         navigate("/boot");
@@ -269,7 +245,7 @@ export function LoginScreen() {
         // Handle authentication errors
         setIsLoading(false);
         setErrors([{ field: 'general', message: data.message }]);
-        
+
         // Handle lockout for too many attempts
         setLoginAttempts(prev => prev + 1);
         if (data.message?.includes('Invalid') && loginAttempts >= MAX_LOGIN_ATTEMPTS - 1) {
@@ -277,11 +253,11 @@ export function LoginScreen() {
           setLockoutTimer(LOCKOUT_TIME);
         }
       }
-      
-    } catch (err) {
+
+    } catch (err: any) {
       console.error("Login error:", err);
       setIsLoading(false);
-      setErrors([{ field: 'general', message: "Login failed. Please try again." }]);
+      setErrors([{ field: 'general', message: err?.message ? `Login failed: ${err.message}` : "Login failed. Please try again." }]);
     }
   };
 
@@ -406,9 +382,9 @@ export function LoginScreen() {
             >
               <Shield className="w-10 h-10 text-cyan-400" />
             </motion.div>
-            <h1 className="text-3xl font-bold text-white mb-2">NEXUS AI</h1>
+            <h1 className="text-3xl font-bold text-white mb-2">AI-POWERED</h1>
             <p className="text-cyan-400 text-sm tracking-wider">
-              PREDICTIVE MAINTENANCE CORE
+              PREDICTIVE MAINTENANCE SYSTEM
             </p>
             <p className="text-gray-400 text-xs mt-1">
               Secure Industrial Intelligence System
@@ -489,13 +465,12 @@ export function LoginScreen() {
                   onFocus={handleInputFocus}
                   onBlur={() => handleBlur("operatorId")}
                   disabled={isLockedOut || isLoading}
-                  className={`w-full px-4 py-3 pr-10 bg-white/5 border rounded-lg text-white placeholder-gray-500 focus:outline-none transition-all ${
-                    hasFieldError("operatorId")
+                  className={`w-full px-4 py-3 pr-10 bg-white/5 border rounded-lg text-white placeholder-gray-500 focus:outline-none transition-all ${hasFieldError("operatorId")
                       ? "border-red-500/50 focus:border-red-500 focus:ring-1 focus:ring-red-500"
                       : touched.operatorId && operatorId && !hasFieldError("operatorId")
-                      ? "border-green-500/50 focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                      : "border-cyan-500/30 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
-                  } ${isLockedOut || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                        ? "border-green-500/50 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                        : "border-cyan-500/30 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                    } ${isLockedOut || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                   placeholder="Enter operator ID"
                   autoComplete="username"
                 />
@@ -542,13 +517,12 @@ export function LoginScreen() {
                   onFocus={handleInputFocus}
                   onBlur={() => handleBlur("password")}
                   disabled={isLockedOut || isLoading}
-                  className={`w-full px-4 py-3 pr-10 bg-white/5 border rounded-lg text-white placeholder-gray-500 focus:outline-none transition-all ${
-                    hasFieldError("password")
+                  className={`w-full px-4 py-3 pr-10 bg-white/5 border rounded-lg text-white placeholder-gray-500 focus:outline-none transition-all ${hasFieldError("password")
                       ? "border-red-500/50 focus:border-red-500 focus:ring-1 focus:ring-red-500"
                       : touched.password && password && !hasFieldError("password")
-                      ? "border-green-500/50 focus:border-green-500 focus:ring-1 focus:ring-green-500"
-                      : "border-cyan-500/30 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
-                  } ${isLockedOut || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                        ? "border-green-500/50 focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                        : "border-cyan-500/30 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                    } ${isLockedOut || isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
                   placeholder="Enter password"
                   autoComplete="current-password"
                 />
@@ -589,15 +563,14 @@ export function LoginScreen() {
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-gray-400">Password Strength:</span>
                     <span
-                      className={`text-xs font-medium ${
-                        getPasswordStrengthColor() === "green"
+                      className={`text-xs font-medium ${getPasswordStrengthColor() === "green"
                           ? "text-green-400"
                           : getPasswordStrengthColor() === "yellow"
-                          ? "text-yellow-400"
-                          : getPasswordStrengthColor() === "orange"
-                          ? "text-orange-400"
-                          : "text-red-400"
-                      }`}
+                            ? "text-yellow-400"
+                            : getPasswordStrengthColor() === "orange"
+                              ? "text-orange-400"
+                              : "text-red-400"
+                        }`}
                     >
                       {getPasswordStrengthLabel()}
                     </span>
@@ -606,17 +579,16 @@ export function LoginScreen() {
                     {[1, 2, 3, 4, 5].map((index) => (
                       <div
                         key={index}
-                        className={`h-1 flex-1 rounded-full transition-all ${
-                          index <= getPasswordStrengthScore()
+                        className={`h-1 flex-1 rounded-full transition-all ${index <= getPasswordStrengthScore()
                             ? getPasswordStrengthColor() === "green"
                               ? "bg-green-500"
                               : getPasswordStrengthColor() === "yellow"
-                              ? "bg-yellow-500"
-                              : getPasswordStrengthColor() === "orange"
-                              ? "bg-orange-500"
-                              : "bg-red-500"
+                                ? "bg-yellow-500"
+                                : getPasswordStrengthColor() === "orange"
+                                  ? "bg-orange-500"
+                                  : "bg-red-500"
                             : "bg-gray-700"
-                        }`}
+                          }`}
                       />
                     ))}
                   </div>
@@ -635,9 +607,8 @@ export function LoginScreen() {
                           <XCircle className="w-3 h-3 text-gray-600" />
                         )}
                         <span
-                          className={`text-xs ${
-                            req.met ? "text-green-400" : "text-gray-500"
-                          }`}
+                          className={`text-xs ${req.met ? "text-green-400" : "text-gray-500"
+                            }`}
                         >
                           {req.label}
                         </span>
@@ -675,11 +646,10 @@ export function LoginScreen() {
               disabled={isLockedOut || isLoading || !isFormValid()}
               whileHover={!isLockedOut && !isLoading && isFormValid() ? { scale: 1.02 } : {}}
               whileTap={!isLockedOut && !isLoading && isFormValid() ? { scale: 0.98 } : {}}
-              className={`w-full py-3 rounded-lg font-medium shadow-lg transition-all flex items-center justify-center gap-2 ${
-                isLockedOut || isLoading || !isFormValid()
+              className={`w-full py-3 rounded-lg font-medium shadow-lg transition-all flex items-center justify-center gap-2 ${isLockedOut || isLoading || !isFormValid()
                   ? "bg-gray-500/20 text-gray-500 cursor-not-allowed"
                   : "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-cyan-500/30 hover:shadow-cyan-500/50"
-              }`}
+                }`}
             >
               {isLoading ? (
                 <>

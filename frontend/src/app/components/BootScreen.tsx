@@ -30,7 +30,7 @@ export function BootScreen() {
       setTimeout(() => {
         setCurrentStep(index + 1);
         setProgress(((index + 1) / bootSequence.length) * 100);
-        
+
         // Play sound for each step
         if (index < bootSequence.length - 1) {
           audioSystem.playDataStream();
@@ -67,7 +67,7 @@ export function BootScreen() {
             >
               <div className="w-3 h-3 rounded-full bg-green-400 shadow-lg shadow-green-400/50 animate-pulse" />
               <h2 className="text-2xl font-bold text-white">
-                NEXUS AI SYSTEM INITIALIZATION
+                AI-POWERED PREDICTIVE MAINTENANCE SYSTEM INITIALIZATION
               </h2>
             </motion.div>
             <div className="h-px bg-gradient-to-r from-cyan-500/50 via-purple-500/50 to-transparent" />
@@ -98,13 +98,12 @@ export function BootScreen() {
                   <div className="w-4 h-4 flex-shrink-0" />
                 )}
                 <span
-                  className={`${
-                    index < currentStep - 1
+                  className={`${index < currentStep - 1
                       ? "text-green-400"
                       : index === currentStep - 1
-                      ? "text-cyan-400"
-                      : "text-gray-600"
-                  }`}
+                        ? "text-cyan-400"
+                        : "text-gray-600"
+                    }`}
                 >
                   [{new Date().toLocaleTimeString()}] {step.text}
                   {index === currentStep - 1 && (

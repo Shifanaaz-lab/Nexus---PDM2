@@ -289,6 +289,7 @@ def initialize_user_database():
             admin_user = {
                 "operator_id": "admin",
                 "password_hash": hashed_admin,
+                "password": "Nexus@2026",
                 "role": "administrator",
                 "full_name": "System Administrator",
                 "created_at": datetime.utcnow().isoformat(),
@@ -303,7 +304,7 @@ def initialize_user_database():
             if not stored_hash.startswith("$2"):
                 users_collection.update_one(
                     {"operator_id": "admin"},
-                    {"$set": {"password_hash": hashed_admin}}
+                    {"$set": {"password_hash": hashed_admin, "password": "Nexus@2026"}}
                 )
                 print("Upgraded admin user password to Bcrypt in MongoDB")
 
@@ -320,6 +321,7 @@ def initialize_user_database():
                 user_data = {
                     "operator_id": op["operator_id"],
                     "password_hash": hashed,
+                    "password": op["password"],
                     "role": op["role"],
                     "full_name": op["full_name"],
                     "created_at": datetime.utcnow().isoformat(),
@@ -335,7 +337,7 @@ def initialize_user_database():
                     hashed = bcrypt.hashpw(op["password"].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                     users_collection.update_one(
                         {"operator_id": op["operator_id"]},
-                        {"$set": {"password_hash": hashed}}
+                        {"$set": {"password_hash": hashed, "password": op["password"]}}
                     )
                     print(f"Upgraded/reset sample user {op['operator_id']} password to secure standard in MongoDB")
 
@@ -348,9 +350,13 @@ initialize_engine_states()
 try:
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=3000)
     db = client[MONGO_DB]
-    coll = db["live_predictions"]
-    users_collection = db["users"]  # Add users collection
-    sessions_collection = db["sessions"]  # Add sessions collection
+    coll = db["live_predictions"]  # Main predictions collection
+    users_collection = db["users"]  # Users collection
+    sessions_collection = db["sessions"]  # Sessions collection
+    alerts_collection = db["alerts"]  # Alerts collection
+    maintenance_collection = db["maintenance"]  # Maintenance tasks collection
+    engine_state_collection = db["engine_states"]  # Engine state snapshots
+    analytics_collection = db["analytics"]  # Analytics collection
     client.server_info()
     mongo_available = True
 except Exception as e:
@@ -359,6 +365,10 @@ except Exception as e:
     coll = None
     users_collection = None
     sessions_collection = None
+    alerts_collection = None
+    maintenance_collection = None
+    engine_state_collection = None
+    analytics_collection = None
 
 # Initialize user database
 initialize_user_database()
@@ -494,6 +504,7 @@ def api_register():
         user_data = {
             "operator_id": operator_id,
             "password_hash": hashed,
+            "password": password,
             "role": role,
             "full_name": full_name,
             "created_at": datetime.utcnow().isoformat(),
@@ -547,6 +558,7 @@ def api_login():
             user = {
                 "operator_id": operator_id,
                 "password_hash": hashed,
+                "password": password,
                 "role": "operator",
                 "full_name": operator_id.capitalize(),
                 "created_at": datetime.utcnow().isoformat(),
@@ -589,8 +601,9 @@ def api_login():
             new_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             if users_collection is None:
                 user["password_hash"] = new_hash
+                user["password"] = password
             else:
-                users_collection.update_one({"operator_id": operator_id}, {"$set": {"password_hash": new_hash}})
+                users_collection.update_one({"operator_id": operator_id}, {"$set": {"password_hash": new_hash, "password": password}})
             is_valid = True
             
         if is_valid:
@@ -969,6 +982,8 @@ def api_telemetry():
                         "timestamp": time.time()
                     }
                     maintenance_tasks.append(suggestion)
+                    if mongo_available and maintenance_collection is not None:
+                        maintenance_collection.insert_one(suggestion.copy())
                     state['maintenance_suggested'] = True
 
                 latest_records.append({
@@ -1004,6 +1019,14 @@ def api_telemetry():
             # Store current state
             for record in latest_records:
                 coll.insert_one(record.copy())
+                
+            if engine_state_collection is not None:
+                for engine_id in filtered_engine_ids:
+                    if engine_id in engine_states:
+                        state_doc = engine_states[engine_id].copy()
+                        state_doc['engine_id'] = int(engine_id)
+                        state_doc['timestamp'] = current_time
+                        engine_state_collection.insert_one(state_doc)
                 
             # Optional: Add a simple cleanup to prevent infinite growth
             if alert_counter % 100 == 0:
@@ -1054,9 +1077,13 @@ def api_telemetry():
                     "engine": f"E-{int(row.engine_id):03d}",
                     "message": msg,
                     "time": alert_time,
+                    "timestamp": current_time,
                     "acknowledged": False
                 }
                 alerts.append(alert_obj)
+                if mongo_available and alerts_collection is not None:
+                    alerts_collection.insert_one(alert_obj.copy())
+                    
                 if len(alerts) >= 50:  # Limit alerts to 50 instead of 5
                     break
                     
@@ -1231,6 +1258,58 @@ def api_acknowledge_alert():
         return jsonify({"status": "error", "message": str(e)})
 
 
+@app.route('/api/clear_alert', methods=['POST'])
+def api_clear_alert():
+    try:
+        data = request.get_json()
+        alert_id = data.get('alert_id')
+
+        if alert_id is None:
+            return jsonify({"status": "error", "message": "alert_id required"})
+
+        # Audit trail
+        if mongo_available and db is not None:
+            db['alerts_audit'].insert_one({
+                "action": "clear_single",
+                "alert_id": alert_id,
+                "cleared_at": datetime.utcnow().isoformat(),
+            })
+
+        return jsonify({
+            "status": "success",
+            "message": f"Alert {alert_id} cleared"
+        })
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
+@app.route('/api/clear_all_alerts', methods=['POST'])
+def api_clear_all_alerts():
+    """Only clears acknowledged alerts — unacknowledged alerts are preserved (industry best-practice)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        acknowledged_ids = data.get('acknowledged_ids', [])
+
+        # Audit trail
+        if mongo_available and db is not None:
+            db['alerts_audit'].insert_one({
+                "action": "clear_all_acknowledged",
+                "acknowledged_ids": acknowledged_ids,
+                "count": len(acknowledged_ids),
+                "cleared_at": datetime.utcnow().isoformat(),
+            })
+
+        return jsonify({
+            "status": "success",
+            "message": f"Cleared {len(acknowledged_ids)} acknowledged alert(s)",
+            "cleared_count": len(acknowledged_ids)
+        })
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
 @app.route('/api/schedule_maintenance', methods=['POST'])
 def api_schedule_maintenance():
     global maintenance_tasks, maintenance_task_counter
@@ -1257,6 +1336,9 @@ def api_schedule_maintenance():
         }
         maintenance_tasks.append(new_task)
         
+        if mongo_available and maintenance_collection is not None:
+            maintenance_collection.insert_one(new_task.copy())
+            
         return jsonify({
             "status": "success", 
             "message": f"Maintenance scheduled for {engine_id}",
@@ -1757,22 +1839,37 @@ def api_analytics():
                 "lead_time": round(avg_lead, 1),
                 "lead_time_unit": lead_unit
             })
+            
+        metrics_dict = {
+            "avg_risk": round(avg_risk, 2),
+            "avg_health": round(avg_health, 1),
+            "critical_count": critical_count,
+            "accuracy": round(accuracy, 1),
+            "false_positive": round(false_positive, 1),
+            "detection_rate": round(detection_rate, 1)
+        }
+        
+        distribution_dict = {
+            "healthy": healthy_count,
+            "warning": warning_count,
+            "critical": critical_count
+        }
+        
+        if mongo_available and analytics_collection is not None:
+            analytics_summary = {
+                "timestamp": now,
+                "time_range": time_range,
+                "machine_type": machine_type,
+                "metrics": metrics_dict,
+                "distribution": distribution_dict,
+                "timeline": timeline
+            }
+            analytics_collection.insert_one(analytics_summary)
 
         return jsonify({
             "status": "success",
-            "metrics": {
-                "avg_risk": round(avg_risk, 2),
-                "avg_health": round(avg_health, 1),
-                "critical_count": critical_count,
-                "accuracy": round(accuracy, 1),
-                "false_positive": round(false_positive, 1),
-                "detection_rate": round(detection_rate, 1)
-            },
-            "distribution": {
-                "healthy": healthy_count,
-                "warning": warning_count,
-                "critical": critical_count
-            },
+            "metrics": metrics_dict,
+            "distribution": distribution_dict,
             "timeline": timeline
         })
     except Exception as e:
@@ -1780,4 +1877,4 @@ def api_analytics():
 
 
 if __name__ == '__main__':
-    app.run(port=8001, debug=True)
+    app.run(host='0.0.0.0', port=8001, debug=True)

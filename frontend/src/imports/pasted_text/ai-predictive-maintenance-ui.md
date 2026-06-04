@@ -23,7 +23,7 @@ The design should feel like a high-end system similar to Tesla control systems, 
 
 1. LOGIN / AUTHENTICATION SCREEN
 
-* System name: “NEXUS AI – Predictive Maintenance Core”
+* System name: “AI-POWERED PREDICTIVE MAINTENANCE SYSTEM”
 * Tagline: “Secure Industrial Intelligence System”
 * Fields: Operator ID, Password
 * Show:
